@@ -1,0 +1,43 @@
+> ./test-node-tunings.sh
+Found worker nodes: virt-iholder123-xxz7g-worker-0-42zxd virt-iholder123-xxz7g-worker-0-6kvnx virt-iholder123-xxz7g-worker-0-6v5kh
+
+=== Testing node: virt-iholder123-xxz7g-worker-0-42zxd ===
+  PASS: system.slice memory.swap.max = 0
+  PASS: system.slice io.weight contains 800
+  PASS: system.slice cpu.weight = 800
+  PASS: kubepods.slice io.weight contains 100
+  PASS: kubevirt-tune-watermarks.py deployed
+  PASS: kubevirt-io-latency-setup.py deployed
+  PASS: kubevirt-tune-watermarks.service active
+  PASS: kubevirt-io-latency-setup.service active
+  PASS: watermark_scale_factor = 120 (tuned above default 10)
+  SKIP: io.latency not checked (file-backed swap — known limitation)
+
+=== Testing node: virt-iholder123-xxz7g-worker-0-6kvnx ===
+  PASS: system.slice memory.swap.max = 0
+  PASS: system.slice io.weight contains 800
+  PASS: system.slice cpu.weight = 800
+  PASS: kubepods.slice io.weight contains 100
+  PASS: kubevirt-tune-watermarks.py deployed
+  PASS: kubevirt-io-latency-setup.py deployed
+  PASS: kubevirt-tune-watermarks.service active
+  PASS: kubevirt-io-latency-setup.service active
+  PASS: watermark_scale_factor = 120 (tuned above default 10)
+  SKIP: io.latency not checked (file-backed swap — known limitation)
+
+=== Testing node: virt-iholder123-xxz7g-worker-0-6v5kh ===
+  PASS: system.slice memory.swap.max = 0
+  PASS: system.slice io.weight contains 800
+  PASS: system.slice cpu.weight = 800
+  PASS: kubepods.slice io.weight contains 100
+  PASS: kubevirt-tune-watermarks.py deployed
+  PASS: kubevirt-io-latency-setup.py deployed
+  PASS: kubevirt-tune-watermarks.service active
+  PASS: kubevirt-io-latency-setup.service active
+  PASS: watermark_scale_factor = 120 (tuned above default 10)
+  SKIP: io.latency not checked (file-backed swap — known limitation)
+
+========================================
+Results: 27 passed, 0 failed, 3 skipped
+All checks passed.
+
