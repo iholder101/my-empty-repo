@@ -60,8 +60,25 @@ so that LOW = eviction + runway. Key design points:
   before eviction.
 - The runway (`max(256MiB, 1% RAM)`) scales with node size to match higher aggregate
   memory consumption rates on larger nodes.
+- When kubelet's `systemReserved.memory` or `kubeReserved.memory` are configured,
+  kubelet sets `kubepods.slice/memory.max = capacity - systemReserved - kubeReserved`
+  and monitors
+  [`allocatableMemory.available`](https://kubernetes.io/docs/concepts/scheduling-eviction/node-pressure-eviction/)
+  (the kubepods cgroup's available memory) in addition to node-wide `memory.available`.
+  Because kswapd responds to global watermarks but eviction can fire via the cgroup
+  signal, the reserved memory is added to the target:
+  `target_low = eviction + runway + systemReserved + kubeReserved`.
+  When reserved = 0 (the default), this reduces to the original formula. See
+  [Reserve Compute Resources](https://kubernetes.io/docs/tasks/administer-cluster/reserve-compute-resources/)
+  for details on how
+  [`enforceNodeAllocatable`](https://kubernetes.io/docs/tasks/administer-cluster/reserve-compute-resources/)
+  (default: `["pods"]`) controls cgroup limit enforcement.
 
 ### Computed watermarks across node sizes and eviction thresholds
+
+The tables below assume `systemReserved = 0` and `kubeReserved = 0`. When reserved
+memory is configured, target LOW increases by the reserved amount, pushing scale,
+LOW, and HIGH proportionally higher.
 
 The runway (LOW − eviction) is ~1% of RAM for all node sizes and is independent of
 the eviction threshold — only node size determines the kswapd headroom.
@@ -112,6 +129,7 @@ the eviction threshold — only node size determines the kswapd headroom.
 |----------|-------|---------|
 | Node > 660 GiB with eviction = 100 Mi | Kernel default `min_free_kbytes` may exceed eviction threshold (MIN > eviction) | Script logs a warning and recommends raising the eviction threshold. LOW >> eviction still holds so kswapd ordering is maintained |
 | Small node (32 GiB) with large eviction (1 GiB) | HIGH reserves 8.2% of RAM | Documented limitation; the kernel forces equal spacing between MIN/LOW/HIGH so HIGH cannot be capped independently of LOW |
+| Large systemReserved + kubeReserved (> ~5% of RAM) | HIGH watermark reserves more RAM than without reserved memory | Correct trade-off: reserved memory requires proportionally higher watermarks to maintain kswapd-before-eviction ordering for the cgroup-level eviction signal |
 
 ## IO Protection: `io.latency`
 

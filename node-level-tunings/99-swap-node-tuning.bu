@@ -38,6 +38,7 @@ storage:
           SCALE_MAX = 1000
 
           Watermarks = namedtuple("Watermarks", "min low high managed")
+          KubeletParams = namedtuple("KubeletParams", "eviction_kb sys_reserved_kb kube_reserved_kb")
 
 
           def parse_memory_kb(val, total_ram_kb):
@@ -70,8 +71,8 @@ storage:
               return None
 
 
-          def get_eviction_kb(total_ram_kb):
-              """Read eviction threshold from kubelet config, with retries."""
+          def get_kubelet_params(total_ram_kb):
+              """Read eviction threshold and reserved memory from kubelet config."""
               path = _find_kubelet_config()
               if not path:
                   sys.exit("ERROR: Kubelet config not found after retries")
@@ -79,17 +80,46 @@ storage:
               try:
                   with open(path) as f:
                       data = yaml.safe_load(f)
-                  raw = data.get("evictionHard", {}).get("memory.available", "") if isinstance(data, dict) else ""
+                  if not isinstance(data, dict):
+                      data = {}
               except Exception as e:
                   print(f"WARNING: failed to read kubelet config: {e}")
-                  raw = ""
+                  data = {}
 
-              if not raw:
+              # Eviction threshold
+              raw_eviction = data.get("evictionHard", {}).get("memory.available", "")
+              if raw_eviction:
+                  print(f"Eviction threshold from config: {raw_eviction}")
+                  eviction_kb = parse_memory_kb(raw_eviction, total_ram_kb)
+              else:
                   print("Eviction threshold not found in config, using default: 100Mi")
-                  return DEFAULT_EVICTION_KB
+                  eviction_kb = DEFAULT_EVICTION_KB
 
-              print(f"Eviction threshold from config: {raw}")
-              return parse_memory_kb(raw, total_ram_kb)
+              # System reserved memory
+              raw_sys = data.get("systemReserved", {}).get("memory", "")
+              if raw_sys:
+                  try:
+                      sys_reserved_kb = parse_memory_kb(raw_sys, total_ram_kb)
+                      print(f"systemReserved.memory from config: {raw_sys} ({sys_reserved_kb // 1024} MiB)")
+                  except SystemExit:
+                      print(f"WARNING: could not parse systemReserved.memory '{raw_sys}', assuming 0")
+                      sys_reserved_kb = 0
+              else:
+                  sys_reserved_kb = 0
+
+              # Kube reserved memory
+              raw_kube = data.get("kubeReserved", {}).get("memory", "")
+              if raw_kube:
+                  try:
+                      kube_reserved_kb = parse_memory_kb(raw_kube, total_ram_kb)
+                      print(f"kubeReserved.memory from config: {raw_kube} ({kube_reserved_kb // 1024} MiB)")
+                  except SystemExit:
+                      print(f"WARNING: could not parse kubeReserved.memory '{raw_kube}', assuming 0")
+                      kube_reserved_kb = 0
+              else:
+                  kube_reserved_kb = 0
+
+              return KubeletParams(eviction_kb, sys_reserved_kb, kube_reserved_kb)
 
 
           def read_zoneinfo(page_size_kb):
@@ -121,7 +151,9 @@ storage:
 
               total_ram_kb = read_total_ram_kb()
               wm = read_zoneinfo(page_size_kb)
-              eviction_kb = get_eviction_kb(total_ram_kb)
+              kp = get_kubelet_params(total_ram_kb)
+              eviction_kb = kp.eviction_kb
+              reserved_kb = kp.sys_reserved_kb + kp.kube_reserved_kb
 
               if wm.managed == 0:
                   sys.exit("ERROR: managed pages is 0, cannot compute scale factor")
@@ -129,6 +161,8 @@ storage:
               print(f"Total RAM: {total_ram_kb // 1024} MiB, managed: {wm.managed // 1024} MiB")
               print(f"Kernel MIN watermark: {wm.min // 1024} MiB")
               print(f"Eviction threshold: {eviction_kb // 1024} MiB")
+              if reserved_kb:
+                  print(f"Reserved memory (system + kube): {reserved_kb // 1024} MiB")
 
               if wm.min >= eviction_kb:
                   print(f"WARNING: MIN watermark ({wm.min // 1024} MiB) >= eviction threshold "
@@ -136,7 +170,7 @@ storage:
                         f"kubelet can evict pods. Consider raising the eviction threshold.")
 
               runway_kb = max(256 * 1024, total_ram_kb // 100)  # max(256 MiB, 1% of RAM)
-              target_low_kb = eviction_kb + runway_kb
+              target_low_kb = eviction_kb + runway_kb + reserved_kb
 
               if wm.low >= target_low_kb:
                   print(f"LOW watermark ({wm.low // 1024} MiB) already exceeds target "
