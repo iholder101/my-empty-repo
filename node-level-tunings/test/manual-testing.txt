@@ -1,0 +1,16 @@
+> oc debug node/virt-iholder123-xxz7g-worker-0-42zxd
+Starting pod/virt-iholder123-xxz7g-worker-0-42zxd-debug-8kfsj ...
+To use host binaries, run `chroot /host`
+
+sh-5.1# cat /sys/fs/cgroup/system.slice/memory.swap.max
+0
+
+sh-5.1# cat /sys/fs/cgroup/system.slice/io.weight
+default 800
+
+sh-5.1# cat /sys/fs/cgroup/system.slice/cpu.weight
+800
+
+sh-5.1# cat /sys/fs/cgroup/kubepods.slice/io.weight
+default 100
+
